@@ -16,7 +16,7 @@ readme = "README.md"
 default = ["apple-native", "secret-service", "windows-native"]
 
 ## Use the built-in Keychain Services on macOS and iOS
-apple-native = ["dep:security-framework"]
+apple-native = ["dep:security-framework", "dep:core-foundation"]
 ## Use the secret-service on *nix.
 secret-service = ["dep:dbus-secret-service"]
 ## Use the built-in credential store on Windows
@@ -30,6 +30,7 @@ log = "0.4"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 security-framework = { version = "3", optional = true }
+core-foundation = { version = "0.10", optional = true }
 
 [target.'cfg(any(target_os = "linux",target_os = "freebsd", target_os = "openbsd"))'.dependencies]
 dbus-secret-service = { version = "4", features = ["crypto-rust"], optional = true }
