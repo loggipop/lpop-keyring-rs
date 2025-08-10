@@ -80,15 +80,15 @@ ignores all the others. so clients can't use it to access or update any attribut
 use super::credential::{Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi};
 use super::error::{Error as ErrorCode, Result, decode_password};
 use crate::ios::IosCredential;
-use security_framework::base::Error;
-use security_framework::os::macos::keychain::{SecKeychain, SecPreferencesDomain};
-use security_framework::os::macos::passwords::find_generic_password;
-use core_foundation::dictionary::CFMutableDictionary;
 use core_foundation::base::{CFType, TCFType};
-use core_foundation::string::CFString;
 use core_foundation::boolean::CFBoolean;
 use core_foundation::data::CFData;
+use core_foundation::dictionary::CFMutableDictionary;
+use core_foundation::string::CFString;
+use security_framework::base::Error;
 use security_framework::base::Error as SecError;
+use security_framework::os::macos::keychain::{SecKeychain, SecPreferencesDomain};
+use security_framework::os::macos::passwords::find_generic_password;
 use std::ptr;
 
 // Define all required Security Framework constants
@@ -108,13 +108,20 @@ unsafe extern "C" {
     static K_SEC_RETURN_DATA: *const std::ffi::c_void;
     #[link_name = "kSecAttrSynchronizable"]
     static K_SEC_ATTR_SYNCHRONIZABLE: *const std::ffi::c_void;
-    #[link_name = "kSecAttrAccessGroup"] 
+    #[link_name = "kSecAttrAccessGroup"]
     static K_SEC_ATTR_ACCESS_GROUP: *const std::ffi::c_void;
-    
+
     // Core SecItem functions
-    fn SecItemAdd(attributes: *const std::ffi::c_void, result: *mut *const std::ffi::c_void) -> i32;
-    fn SecItemUpdate(query: *const std::ffi::c_void, attributesToUpdate: *const std::ffi::c_void) -> i32;
-    fn SecItemCopyMatching(query: *const std::ffi::c_void, result: *mut *const std::ffi::c_void) -> i32;
+    fn SecItemAdd(attributes: *const std::ffi::c_void, result: *mut *const std::ffi::c_void)
+    -> i32;
+    fn SecItemUpdate(
+        query: *const std::ffi::c_void,
+        attributesToUpdate: *const std::ffi::c_void,
+    ) -> i32;
+    fn SecItemCopyMatching(
+        query: *const std::ffi::c_void,
+        result: *mut *const std::ffi::c_void,
+    ) -> i32;
     fn SecItemDelete(query: *const std::ffi::c_void) -> i32;
 }
 
@@ -286,7 +293,7 @@ impl MacCredential {
                 "cannot be empty".to_string(),
             ));
         }
-        
+
         // Validate access group format if provided
         if let Some(ref group) = access_group {
             if synchronizable && !group.contains('.') {
@@ -296,13 +303,13 @@ impl MacCredential {
                 ));
             }
         }
-        
+
         let domain = if let Some(target) = target {
             target
         } else {
             MacKeychainDomain::User
         };
-        
+
         Ok(Self {
             domain,
             service: service.to_string(),
@@ -330,33 +337,33 @@ impl MacCredential {
         unsafe {
             // Create mutable dictionary for keychain item attributes
             let mut dict: CFMutableDictionary<CFString, CFType> = CFMutableDictionary::new();
-            
+
             // Set basic attributes
             dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_CLASS as _),
-                &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _).as_CFType()
+                &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _).as_CFType(),
             );
-            
+
             dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_ATTR_SERVICE as _),
-                &CFString::new(&self.service).as_CFType()
+                &CFString::new(&self.service).as_CFType(),
             );
-            
+
             dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCOUNT as _),
-                &CFString::new(&self.account).as_CFType()
+                &CFString::new(&self.account).as_CFType(),
             );
-            
+
             dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_VALUE_DATA as _),
-                &CFData::from_buffer(secret).as_CFType()
+                &CFData::from_buffer(secret).as_CFType(),
             );
 
             // Add access group if specified
             if let Some(ref access_group) = self.access_group {
                 dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCESS_GROUP as _),
-                    &CFString::new(access_group).as_CFType()
+                    &CFString::new(access_group).as_CFType(),
                 );
             }
 
@@ -364,49 +371,52 @@ impl MacCredential {
             if self.synchronizable {
                 dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_SYNCHRONIZABLE as _),
-                    &CFBoolean::true_value().as_CFType()
+                    &CFBoolean::true_value().as_CFType(),
                 );
             }
 
             // Try to add the item
             let status = SecItemAdd(dict.as_concrete_TypeRef() as _, ptr::null_mut());
-            
+
             if status == ERR_SEC_SUCCESS {
                 Ok(())
             } else if status == ERR_SEC_DUPLICATE_ITEM {
                 // Item exists, update it instead
-                let mut query_dict: CFMutableDictionary<CFString, CFType> = CFMutableDictionary::new();
+                let mut query_dict: CFMutableDictionary<CFString, CFType> =
+                    CFMutableDictionary::new();
                 query_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_CLASS as _),
-                    &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _).as_CFType()
+                    &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _)
+                        .as_CFType(),
                 );
                 query_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_SERVICE as _),
-                    &CFString::new(&self.service).as_CFType()
+                    &CFString::new(&self.service).as_CFType(),
                 );
                 query_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCOUNT as _),
-                    &CFString::new(&self.account).as_CFType()
+                    &CFString::new(&self.account).as_CFType(),
                 );
-                
+
                 if let Some(ref access_group) = self.access_group {
                     query_dict.add(
                         &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCESS_GROUP as _),
-                        &CFString::new(access_group).as_CFType()
+                        &CFString::new(access_group).as_CFType(),
                     );
                 }
 
-                let mut update_dict: CFMutableDictionary<CFString, CFType> = CFMutableDictionary::new();
+                let mut update_dict: CFMutableDictionary<CFString, CFType> =
+                    CFMutableDictionary::new();
                 update_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_VALUE_DATA as _),
-                    &CFData::from_buffer(secret).as_CFType()
+                    &CFData::from_buffer(secret).as_CFType(),
                 );
 
                 let status = SecItemUpdate(
                     query_dict.as_concrete_TypeRef() as _,
-                    update_dict.as_concrete_TypeRef() as _
+                    update_dict.as_concrete_TypeRef() as _,
                 );
-                
+
                 if status == ERR_SEC_SUCCESS {
                     Ok(())
                 } else {
@@ -422,32 +432,32 @@ impl MacCredential {
     fn get_secret_with_secitem_api(&self) -> Result<Vec<u8>> {
         unsafe {
             let mut query_dict: CFMutableDictionary<CFString, CFType> = CFMutableDictionary::new();
-            
+
             query_dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_CLASS as _),
-                &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _).as_CFType()
+                &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _).as_CFType(),
             );
-            
+
             query_dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_ATTR_SERVICE as _),
-                &CFString::new(&self.service).as_CFType()
+                &CFString::new(&self.service).as_CFType(),
             );
-            
+
             query_dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCOUNT as _),
-                &CFString::new(&self.account).as_CFType()
+                &CFString::new(&self.account).as_CFType(),
             );
-            
+
             query_dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_RETURN_DATA as _),
-                &CFBoolean::true_value().as_CFType()
+                &CFBoolean::true_value().as_CFType(),
             );
-            
+
             // Add access group if specified
             if let Some(ref access_group) = self.access_group {
                 query_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCESS_GROUP as _),
-                    &CFString::new(access_group).as_CFType()
+                    &CFString::new(access_group).as_CFType(),
                 );
             }
 
@@ -455,15 +465,12 @@ impl MacCredential {
             if self.synchronizable {
                 query_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_SYNCHRONIZABLE as _),
-                    &CFBoolean::true_value().as_CFType()
+                    &CFBoolean::true_value().as_CFType(),
                 );
             }
 
             let mut result: *const std::ffi::c_void = ptr::null();
-            let status = SecItemCopyMatching(
-                query_dict.as_concrete_TypeRef() as _,
-                &mut result
-            );
+            let status = SecItemCopyMatching(query_dict.as_concrete_TypeRef() as _, &mut result);
 
             if status == ERR_SEC_SUCCESS {
                 let data = CFData::wrap_under_create_rule(result as _);
@@ -478,27 +485,27 @@ impl MacCredential {
     fn delete_credential_with_secitem_api(&self) -> Result<()> {
         unsafe {
             let mut query_dict: CFMutableDictionary<CFString, CFType> = CFMutableDictionary::new();
-            
+
             query_dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_CLASS as _),
-                &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _).as_CFType()
+                &CFString::wrap_under_create_rule(K_SEC_CLASS_GENERIC_PASSWORD as _).as_CFType(),
             );
-            
+
             query_dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_ATTR_SERVICE as _),
-                &CFString::new(&self.service).as_CFType()
+                &CFString::new(&self.service).as_CFType(),
             );
-            
+
             query_dict.add(
                 &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCOUNT as _),
-                &CFString::new(&self.account).as_CFType()
+                &CFString::new(&self.account).as_CFType(),
             );
-            
+
             // Add access group if specified
             if let Some(ref access_group) = self.access_group {
                 query_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_ACCESS_GROUP as _),
-                    &CFString::new(access_group).as_CFType()
+                    &CFString::new(access_group).as_CFType(),
                 );
             }
 
@@ -506,7 +513,7 @@ impl MacCredential {
             if self.synchronizable {
                 query_dict.add(
                     &CFString::wrap_under_create_rule(K_SEC_ATTR_SYNCHRONIZABLE as _),
-                    &CFBoolean::true_value().as_CFType()
+                    &CFBoolean::true_value().as_CFType(),
                 );
             }
 
@@ -639,7 +646,7 @@ pub fn decode_error(err: Error) -> ErrorCode {
 
 #[cfg(test)]
 mod tests {
-    use crate::credential::{CredentialPersistence, CredentialApi};
+    use crate::credential::{CredentialApi, CredentialPersistence};
     use crate::{Entry, Error, tests::generate_random_string};
 
     use super::{MacCredential, default_credential_builder};
@@ -764,7 +771,7 @@ mod tests {
         let service = generate_random_string();
         let user = generate_random_string();
         let access_group = Some("TEAM123.com.example.test".to_string());
-        
+
         // Test creating a credential with iCloud sync enabled
         let credential = MacCredential::new_with_icloud_sync(
             None, // use default keychain domain
@@ -773,8 +780,11 @@ mod tests {
             access_group.clone(),
             true, // enable synchronization
         );
-        
-        assert!(credential.is_ok(), "Failed to create iCloud sync credential");
+
+        assert!(
+            credential.is_ok(),
+            "Failed to create iCloud sync credential"
+        );
         let cred = credential.unwrap();
         assert_eq!(cred.service, service);
         assert_eq!(cred.account, user);
@@ -782,23 +792,26 @@ mod tests {
         assert!(cred.synchronizable);
     }
 
-    #[test] 
+    #[test]
     fn test_access_group_validation() {
         let service = generate_random_string();
         let user = generate_random_string();
-        
+
         // Test invalid access group format for iCloud sync
         let invalid_result = MacCredential::new_with_icloud_sync(
             None,
             &service,
             &user,
             Some("invalid-format".to_string()), // missing dot separator
-            true, // sync enabled
+            true,                               // sync enabled
         );
-        
-        assert!(invalid_result.is_err(), "Should reject invalid access group format");
+
+        assert!(
+            invalid_result.is_err(),
+            "Should reject invalid access group format"
+        );
         assert!(matches!(invalid_result, Err(Error::Invalid(_, _))));
-        
+
         // Test valid access group format
         let valid_result = MacCredential::new_with_icloud_sync(
             None,
@@ -807,25 +820,31 @@ mod tests {
             Some("TEAM123.com.example.app".to_string()),
             true,
         );
-        
-        assert!(valid_result.is_ok(), "Should accept valid access group format");
+
+        assert!(
+            valid_result.is_ok(),
+            "Should accept valid access group format"
+        );
     }
 
     #[test]
     fn test_non_sync_credential_with_access_group() {
         let service = generate_random_string();
         let user = generate_random_string();
-        
+
         // Test creating credential with access group but no sync (should be allowed)
         let credential = MacCredential::new_with_icloud_sync(
             None,
             &service,
             &user,
             Some("invalid-no-dot".to_string()), // invalid format but sync is false
-            false, // no sync
+            false,                              // no sync
         );
-        
-        assert!(credential.is_ok(), "Should allow any access group format when sync is disabled");
+
+        assert!(
+            credential.is_ok(),
+            "Should allow any access group format when sync is disabled"
+        );
     }
 
     #[test]
@@ -834,64 +853,74 @@ mod tests {
         let user = generate_random_string();
         let password = "test icloud sync password";
         let access_group = Some("TEST123.com.keyring.test".to_string());
-        
+
         // Create credential with iCloud sync
-        let credential = MacCredential::new_with_icloud_sync(
-            None,
-            &service,
-            &user,
-            access_group,
-            true,
-        ).expect("Failed to create iCloud sync credential");
-        
+        let credential =
+            MacCredential::new_with_icloud_sync(None, &service, &user, access_group, true)
+                .expect("Failed to create iCloud sync credential");
+
         // Set password
-        credential.set_password(password)
+        credential
+            .set_password(password)
             .expect("Failed to set password with iCloud sync");
-        
+
         // Get password back
-        let retrieved_password = credential.get_password()
+        let retrieved_password = credential
+            .get_password()
             .expect("Failed to get password with iCloud sync");
-        
-        assert_eq!(password, retrieved_password, "Password mismatch with iCloud sync");
-        
+
+        assert_eq!(
+            password, retrieved_password,
+            "Password mismatch with iCloud sync"
+        );
+
         // Clean up
-        credential.delete_credential()
+        credential
+            .delete_credential()
             .expect("Failed to delete credential with iCloud sync");
-        
+
         // Verify deletion
         assert!(matches!(credential.get_password(), Err(Error::NoEntry)));
     }
 
-    #[test] 
+    #[test]
     fn test_round_trip_with_access_group_only() {
         let service = generate_random_string();
         let user = generate_random_string();
         let secret = b"test access group secret data";
         let access_group = Some("TEAM456.com.keyring.accesstest".to_string());
-        
+
         // Create credential with access group but no sync
         let credential = MacCredential::new_with_icloud_sync(
             None,
-            &service, 
+            &service,
             &user,
             access_group,
             false, // no sync
-        ).expect("Failed to create access group credential");
-        
+        )
+        .expect("Failed to create access group credential");
+
         // Set secret
-        credential.set_secret(secret)
+        credential
+            .set_secret(secret)
             .expect("Failed to set secret with access group");
-        
-        // Get secret back  
-        let retrieved_secret = credential.get_secret()
+
+        // Get secret back
+        let retrieved_secret = credential
+            .get_secret()
             .expect("Failed to get secret with access group");
-        
-        assert_eq!(secret, retrieved_secret.as_slice(), "Secret mismatch with access group");
-        
+
+        assert_eq!(
+            secret,
+            retrieved_secret.as_slice(),
+            "Secret mismatch with access group"
+        );
+
         // Clean up
-        credential.delete_credential()
+        credential
+            .delete_credential()
             .expect("Failed to delete credential with access group");
-        
+
         // Verify deletion
         assert!(matches!(credential.get_secret(), Err(Error::NoEntry)));
     }
@@ -901,28 +930,34 @@ mod tests {
         let service = generate_random_string();
         let user = generate_random_string();
         let password = "test backward compatibility";
-        
+
         // Create old-style credential (no iCloud sync features)
         let credential = MacCredential::new_with_target(None, &service, &user)
             .expect("Failed to create legacy credential");
-        
+
         // Verify it has default values for new fields
         assert_eq!(credential.access_group, None);
         assert!(!credential.synchronizable);
-        
+
         // Test round trip with legacy keychain API
-        credential.set_password(password)
+        credential
+            .set_password(password)
             .expect("Failed to set password with legacy credential");
-        
-        let retrieved_password = credential.get_password()
+
+        let retrieved_password = credential
+            .get_password()
             .expect("Failed to get password with legacy credential");
-        
-        assert_eq!(password, retrieved_password, "Password mismatch with legacy credential");
-        
+
+        assert_eq!(
+            password, retrieved_password,
+            "Password mismatch with legacy credential"
+        );
+
         // Clean up
-        credential.delete_credential()
+        credential
+            .delete_credential()
             .expect("Failed to delete legacy credential");
-        
+
         // Verify deletion
         assert!(matches!(credential.get_password(), Err(Error::NoEntry)));
     }
